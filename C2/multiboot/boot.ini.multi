@@ -5,14 +5,14 @@ ODROIDC2-UBOOT-CONFIG
 # ===============================================================
 # Time (sec) to automatic boot if no key is pressed (min 5)     =
 # ------------------------------------------------------------- =
-setenv BOOT_DELAY "60"
+setenv BOOT_DELAY "5"
 # ===============================================================
 # Menu item to boot if no key is pressed ("1" ~ "8")            =
 # ------------------------------------------------------------- =
 setenv DEFAULT_OS "1"
 #
 # ===============================================================
-
+#DESCRIPTION JEEDOM
 
 # UNCOMMENT ONE OF BELOW SCREEN RESOLUTIONS TO USE FOR BOOT MENU/INSTALLATION
 

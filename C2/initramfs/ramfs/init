@@ -34,8 +34,8 @@ if ! mount -t devtmpfs -o nosuid,mode=0755 udev /dev; then
 fi
 mkdir /dev/pts
 mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
-mount -t tmpfs -o "noexec,nosuid,size=80%,mode=0755" tmpfs /run
-mkdir -m 0755 /run/initramfs
+#mount -t tmpfs -o "noexec,nosuid,size=80%,mode=0755" tmpfs /run
+#mkdir -m 0755 /run/initramfs
 
 # Export the dpkg architecture
 export DPKG_ARCH=
@@ -190,7 +190,7 @@ sleep 1
 
 [ ! $BOOTDELAY -gt 4 ] &&  BOOTDELAY=5
 
-export SCRIPT_VERSION="v2.1"
+export SCRIPT_VERSION="v1"
 export O_BOARD="OD"
 export ODROID_DTB="odroid.dtb"
 export ODROID_FSTAB="fstab.odroid"
@@ -244,6 +244,7 @@ _defboot="none"
 _defdescr="none"
 _defcard="1"
 boot_fail="yes"
+_instfound="no"
 
 ask_for_card() {
 	clear
@@ -536,6 +537,35 @@ do_boot() {
 	fi
 }
 #----------------------------------------------------------------------------------------------------------------------
+# Check where the installation files are located
+check_source() {
+	if [ -b ${1} ]; then
+    	mkdir /mnt3 > /dev/null 2>&1
+    	/bin/mountx ${1} /mnt3
+		[ $? -ne 0 ] && return 1
+	else
+		return 1
+    fi
+    sleep 1
+    # === Source drive found and 1st partition mounted on /mnt ===
+
+    # === Check installation files on source drive ===
+	
+	if [ -f /mnt3/backupJeedom.tar.gz ]; then
+		printf "\r\033[2K"
+		printf "    BACKUP ARCHIVE FOUND! UNCOMPRESSING, PLEASE WAIT..."
+		tar -xvzmf /mnt3/backupJeedom.tar.gz -C /mnt3 
+	fi	
+    # LINUX
+    if [ -d /mnt3/C2_backup/linux ]; then
+    	if [ -f /mnt3/C2_backup/linux/jeedom.img ]; then
+			_instfound="yes"
+		fi
+	fi
+	umount /mnt3
+	[ "${_instfound}" = "no" ] && return 1
+    return 0
+}
 
 #------------------------------------------------------
 set_menu_key() {
@@ -704,15 +734,11 @@ os_detect() {
 	clear
 	printf "\n"
 	printf "\033[36m\033[1m\n"
-	if [ ! "${O_BOARD}" = "XU" ]; then
+
 		printf "    ============================\n"
-		printf "    = ODROID %s BOOT MENU %s =\n" "${O_BOARD}" "${SCRIPT_VERSION}"
+		printf "    = JEEDOM BOOT MENU %s =\n" "${SCRIPT_VERSION}"
 		printf "    ============================\n"
-	else
-		printf "    =================================\n"
-		printf "    = ODROID XU3/XU4 BOOT MENU %s =\n" "${SCRIPT_VERSION}"
-		printf "    =================================\n"
-	fi
+
 	if [ "${NUMCARDS}" = "2" ]; then
 		printf "\033[22m    Two cards detected, booted from \033[1m%s\033[22m\033[37m\n\n" "${BOOT_CARDTYPE}"
 	else
@@ -733,15 +759,15 @@ os_detect() {
 			[ ! ${_numos} -eq 0 ] && printf "\n"
 			get_menu_items
 		fi
-		[ ${_numos} -eq 0 ] && printf "\033[36m    \033[36m\033[1m!\033[22m  NO OS DETECTED\033[36m\n"
+		#[ ${_numos} -eq 0 ] && printf "\033[36m    \033[36m\033[1m!\033[22m  NO OS DETECTED\033[36m\n"
 	else
-		[ ${_numos} -eq 0 ] && printf "\033[36m    \033[36m\033[1m!\033[22m  NO MULTIBOOT CARD DETECTED\033[36m\n"
+		get_menu_items
+		#[ ${_numos} -eq 0 ] && printf "\033[36m    \033[36m\033[1m!\033[22m  NO MULTIBOOT CARD DETECTED\033[36m\n"
 	fi
 
 	printf "\n"
-	printf "    \033[36m\033[1mB\033[22m  Backup Android/Linux/OpenElec\033[36m\n"
-	printf "    \033[36m\033[1mU\033[22m  Update Android\033[36m\n"
-	printf "    \033[33m\033[1mI\033[22m  Prepare the card for MultiBoot, Install OS's\033[36m\n"
+	printf "    \033[36m\033[1mB\033[22m  Backup JEEDOM\033[36m\n"
+	printf "    \033[33m\033[1mI\033[22m  Install JEEDOM\033[36m\n"
 	printf "\n"
 	printf "    \033[36m\033[1mX\033[22m  Exit to busybox shell\033[36m\n"
 	printf "    \033[33m\033[1mR\033[22m  Reboot\033[36m\n"
@@ -839,12 +865,37 @@ os_detect
 # ======================================
 _boot_delay=$BOOTDELAY
 
+check_source "/dev/sda1"
+
 # === Detect available Operating Systems ===
 while true; do
 	printf "\r\033[2K"
     printf "\033[37m    Select an option or boot to menu item \033[36m\033[1m%s\033[22m in\033[31m\033[1m %s \033[22m\033[37mseconds" "${DEFAULTBOOT}" "${_boot_delay}"
 
 	A="Z"
+	if [ "${_instfound}" = "yes" ]; then
+		# === UNIVERSAL INSTALLER ===
+		if [ -f /install.script ]; then
+			printf "\r\033[2K"
+			printf "    USB BACKUP FOUND! LAUNCHING INSTALL..."
+			sleep 4
+			umount /mnt1  > /dev/null 2>&1
+			umount /mnt2  > /dev/null 2>&1
+			sleep 1
+			# ============================
+			# Execute the installer script
+			UPGRADE_ANDROID="no"
+			/install.script
+			# ============================
+			A="Z"
+			os_detect
+			_boot_delay=$BOOTDELAY
+		else
+			printf "\r\033[2K"
+			printf "    INSTALL SCRIPT NOT FOUND!"
+			sleep 4
+		fi
+	fi
     if read -n 1 -t 1 -s A; then
 		_boot_delay=$BOOTDELAY
 		if [ "${A}" = "B" ]; then
